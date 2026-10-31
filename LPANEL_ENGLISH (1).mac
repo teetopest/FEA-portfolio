@@ -1,0 +1,169 @@
+finish
+/clear		! removes data from previous session (if necessary)
+
+/prep7		! entering the preprocessing context
+
+! Below: definition of parameters (geometric, material-related)
+PANELSTIFFNESS=1E10	! this is only a starting value (in Pascals) - you are supposed to change it
+WEIGHT=10		! Weight of the mass we place on the panel (in Newtons)
+
+LX=0.5			! these geometric parameters are shown on the sketch, on the page with exercise tasks
+			
+DX=1.5 $ DXP=DX/2  	! the dollar sign separates two commands written in a single line
+		
+DY=0.3 $ DYP=DY/2
+KSX=0.4			! dimensions of the chair's seat
+KSY=0.4 $ KSYP=KSY/2
+KSZ1=0.5		! chair's legs - height
+KSZ2=0.4		! height of the back of the chair
+LEGRADIUS=0.01
+THICKNESSOFTHEBACK=0.01 $ GS=THICKNESSOFTHEBACK	
+PANELTHICKNESS=0.05     $ GD=PANELTHICKNESS		
+
+! a little bit of "CAD": Points (called "Keypoints" in ANSYS), Lines, Areas
+K,1,LX+KSX,	KSYP,	-KSZ1
+K,2,LX,		KSYP,	-KSZ1
+K,3,LX,		KSYP,	0
+K,4,LX+KSX,	KSYP,	0
+K,5,LX+KSX,	KSYP,	KSZ2
+K,6,0,		DYP,	GS/2+GD/2
+K,7,DXP,	DYP,	GS/2+GD/2
+
+/dev,font,2,,,,15	! changing the font size
+
+K,8,LX+KSX,	-KSYP,	-KSZ1
+K,9,LX,		-KSYP,	-KSZ1
+K,10,LX,	-KSYP,	0
+K,11,LX+KSX,	-KSYP,	0
+K,12,LX+KSX,	-KSYP,	KSZ2
+K,13,0,		-DYP,	GS/2+GD/2
+K,14,DXP,	-DYP,	GS/2+GD/2
+
+L,1,4 $ L,2,3 $ L,9,10 $ L,8,11
+L,4,5 $ L,11,12 $ L,5,12
+A,4,3,10,11
+@LUKAPOWIERCH@		! define an area spanning over points 7,6, 13 and 14
+			! "LUKA" means "A GAP", "something missing" in Polish
+
+! now the board on the edge of the chair will be marked ("cut").
+! which is useful to properly model the contact of the board and the chair
+WPCS		! set the working plane at the origin of the coordinate system
+WPOFFS,LX	! move the plane to the edge of the chair
+WPROTA,0,0,90	! rotate this plane 
+ASBW,all	! cut the board - at least apparently, because it will actually remain continuous
+
+ASEL,ALL	! important! - in Ansys, each operation works only on the active set of objects
+LSEL,ALL	! 
+ARSYMM,X,all	! make a mirror copy of areas
+LSYMM,X,all	! make a mirror copy of lines
+NUMMRG,all	! sew both halves of the board (and remove any duplicate points or lines)
+WPSTYLE,,,,,,,,0	! hide the workplane symbol from view
+
+		
+! execute this macro - up to this point.
+! learn two methods: executing "all at once" (by entering the macro name on the command line)
+! or copying piece by piece (CTRL+C fragment, CTRL+V to command line, Enter)
+! watch the macro effect - understand the difference between KPLOT, LPLOT, APLOT and GPLOT
+! Which display method is best here?
+! if necessary, go to Help / Index - enter e.g. GPLOT and read the command description
+! note that some entries have multiple occurrences in Help
+! it is worth looking for "Title = Mechanical APDL Command Reference" - there the command is explained in the simplest way
+! learn to rotate the model efficiently
+! (how does CTRL work? does ALT work? what icon can be used to center the model in the window?)
+! If you have mastered the above functions, proceed further.
+
+
+! so far it was "CAD", i.e. creating the shapes of an object
+! now the "CAE/FEA" will succeed, i.e. the finite element analysis: setting the appropriate material data
+! then assigning boundary conditions (loads, fastenings) and finally performing calculations/viewing the results
+
+ET,1,BEAM188		! standard beam element type
+ET,2,SHELL181		! standard shell element type
+ET,3,SHELL181
+
+SECTYPE,1,BEAM,CSOLID
+SECDATA,LEGRADIUS
+
+SECTYPE,2,SHELL
+SECDATA,THICKNESSOFTHEBACK	
+
+SECTYPE,3,SHELL
+@LUKAGRUBOSC@		! define here a section data corresponding to the panel thickness
+
+@LUKAYOUNG@		! define Young's modulus typical for steel, for material data set number 1
+MP,NUXY,1,0.3		
+
+
+MP,EX,2,2E10		! Chair seat's stiffness; might be left as defined here
+MP,NUXY,2,0.3		! Poisson's modulus - typical for most solid materials
+
+MP,EX,3,PANELSTIFFNESS		! this is the crucial parameter in this exercise!
+MP,NUXY,3,0.3
+
+
+ESIZE,0.02		! setting the average size of finite elements
+
+! note, that before any meshing, we need to select some material data and element type
+ASEL,S,LOC,Z,0		! przyk³ad zawê¿ania selekcji obiektów
+CM,SEAT,AREA	! the areas (or any other objects) may be conveniently grouped into "components"
+MAT,2
+TYPE,2
+SECNUM,2
+AMESH,all		! create elements on selected Areas
+
+
+ASEL,S,LOC,Z,GS/2+GD/2
+CM,PANEL,AREA	! creates a component out of areas forming the board/panel
+MAT,3
+TYPE,3
+SECNUM,3
+AMESH,all
+
+CMSEL,S,SEAT
+CMSEL,A,PANEL
+LSLA
+LSEL,INVE
+MAT,1
+TYPE,1
+SECNUM,1
+@LUKASIATKA@	! define element on all the selected lines
+
+/ESHA,1		! show the profiles of beams and solids (it is not default!)
+
+! does GPLOT show the correct model? a board on two chairs?
+! experiment with parameters (different chair sizes, board thickness, etc.)
+! then proceed to the actual calculations
+
+
+/solu	! this is what the computational context is called
+! first, connect the board with the chair - because the program itself will not recognize their interaction!
+! You can even make materials overlap, it will not cause Error
+NSEL,S,LOC,X,LX
+NSEL,R,LOC,Z,0,GS/2+GD/2
+CP,1,UX,all
+CP,2,UY,all
+CP,3,UZ,all	! tricky: linking displacements - but not rotations
+! this is a reasonable approximation of the actual behavior of the board and chair
+! unless we want to e.g. lift the boards (because the above CP series de facto
+! ties the board to the chair, but allows it to rotate at the point of contact)
+! a universal solution requires the so-called contact algorithm - a difficult matter
+
+NSEL,S,LOC,X,-LX
+NSEL,R,LOC,Z,0,GS/2+GD/2
+CP,4,@LUKACP@	! do it the same way as in the case of the first chair
+CP,5,@LUKACP@
+CP,6,@LUKACP@
+
+
+NSEL,S,LOC,Z,-KSZ1
+D,all,all,0	! again a simplification - this way we permanently attach the chair legs to the floor
+! here, too, the task of a contact algorithm would be ideal, but it is complicated
+NSEL,ALL
+NSEL,S,,,NODE(0,0,0)
+F,all,FZ,-WEIGHT
+
+ALLSEL		! do it routinely - select all before solving
+@LUKAOBLICZ@		! the "heart" of simulation: perform the solution!
+
+/post1		! entering the postprocessing context
+@LUKAUGIECIE@	! show the vertical displacement (U,Z)

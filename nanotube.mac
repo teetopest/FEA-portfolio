@@ -1,0 +1,128 @@
+finish
+/clear
+/prep7
+
+! the starting values are arbitrary - you have to change them all
+! the convenient system of units is microMeters, microNewtons, and (resulting) MegaPascals
+
+NR=12	! should be even, not odd
+	! determines the number of nodes/atoms lying on a single circumference of the nanotube
+NL=11	! does not have to be odd
+	! determines the number of cell layers along the nanotube axis
+	! 
+D=1.0	! basic parameter - side length of a single "hexagon" (C-C distance)
+
+! the global diameter of the tube is derived from the NR parameter (number of atoms on circumference)
+! and the distance between them
+
+
+
+!**** MATERIAL and CROSS-SECTION of the beams
+ET,1,BEAM188
+SECTYPE,1,BEAM,CSOLID
+SECDATA,0.1		! RADIUS (the diameter of the C-C bond (i.e. the diameter of single beams) is twice this value)
+
+MP,EX,1,1000		! stiffness of the C-C bond (here it is really arbitrary, it should be changed)
+MP,NUXY,1,0.3		! Poisson's ratio may stay as is...
+
+
+
+! auxiliary calculations
+OBWOD=(NR/2)*3*D   
+ANGD=360/((3/2)*NR)	
+DMIN=(3**(1/2))/2*D	
+
+*DIM,NODCOORDY,ARRAY,NR*NL*2,3
+
+ktorynod=0
+*DO,iaxial,1,NL*2	
+*DO,ihoop,1,(NR/2)*3
+   LOCAL,11,1
+
+   *IF,MOD(iaxial,2),EQ,0,THEN
+     *IF,MOD(ihoop,3),NE,0,THEN       
+     ktorynod=ktorynod+1
+     N,ktorynod,OBWOD/(2*3.1415),ihoop*ANGD,iaxial*DMIN
+	! creates nodes
+     *ENDIF
+   *ENDIF
+
+   *IF,MOD(iaxial,2),EQ,1,THEN         
+     *IF,MOD(ihoop,3),NE,0,THEN		
+     ofset=(3/2)*ANGD
+     ktorynod=ktorynod+1
+     N,ktorynod,OBWOD/(2*3.1415),ofset+ihoop*ANGD,iaxial*DMIN
+	! tworzy węzły (ale jeszcze nie beleczki)
+     *ENDIF
+   *ENDIF
+   
+   ! recording the coordinates of the created node
+   CSYS,0
+   NODCOORDY(ktorynod,1)=NX(ktorynod)
+   NODCOORDY(ktorynod,2)=NY(ktorynod)
+   NODCOORDY(ktorynod,3)=NZ(ktorynod)
+
+*ENDDO
+*ENDDO
+
+/output,D1_NR10_NL10,txt
+*VWRITE,NODCOORDY(1,1),NODCOORDY(1,2),NODCOORDY(1,3)
+(3F12.6)
+/output
+
+!**** CONNECTING NODES - CREATING BEAMS
+MAT,1 $ TYPE,1 $ REAL,1
+
+ALLS
+NKTO=0
+*GET,NILE,NODE,,COUNT
+
+/UIS,MSGPOP,3
+
+!**** ZEWNĘTRZNA PĘTLA *****
+*DO,r1,1,NILE
+/GOPR
+ALLS
+NKTO=NDNEXT(NKTO)
+NSEL,S,,,NKTO
+CSYS,0
+NNX=NX(NKTO)
+NNY=NY(NKTO)
+NNZ=NZ(NKTO)
+LOCAL,11,2,NNX,NNY,NNZ,0,0,0
+! spherical layout - useful for searching
+! nearby nodes
+
+	!* look for neighbours...
+	ESLN	
+	*GET,ILEZNALAZL,ELEM,,COUNT
+	*IF,ILEZNALAZL,NE,0,THEN
+	NSLE
+	*ELSE
+	NSEL,NONE
+	*ENDIF
+	CM,JUZPODLACZONE,NODE 
+		! inaczej, jeśli ESLN daje zero elementów
+		! ansys potrafi wybrać WSZYSTKIE nody podczas NSLE!
+
+	NSEL,S,LOC,X,0,1.5*D	
+	CMSEL,U,JUZPODLACZONE
+	NSEL,U,,,NKTO
+	CM,SASIEDZI_JESZCZE_NIEPODLACZENI,NODE
+	*GET,ILESASIADOW,NODE,,COUNT
+	SASIAD=0
+	!$$$$$
+	*DO,r3,1,ILESASIADOW
+	CMSEL,S,SASIEDZI_JESZCZE_NIEPODLACZENI
+	SASIAD=NDNEXT(SASIAD)
+		NSEL,S,,,NKTO
+		NSEL,A,,,SASIAD
+		E,NKTO,SASIAD
+
+	*ENDDO
+*ENDDO
+
+ALLS
+/ESHA,1,1
+EPLOT
+CSYS,0
